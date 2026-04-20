@@ -1,0 +1,27 @@
+services:
+  issue-catcher:
+    build: .
+    restart: unless-stopped
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_USERNAME=${GITHUB_USERNAME}
+      - GITHUB_REPO_OWNER=${GITHUB_REPO_OWNER:-open-metadata}
+      - GITHUB_REPO_NAME=${GITHUB_REPO_NAME:-OpenMetadata}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
+      - RESEND_TO_EMAIL=${RESEND_TO_EMAIL}
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-* * * * *}
+      - ACTION_DELAY_MS=${ACTION_DELAY_MS:-2000}
+      - STATE_DIR=/app/data
+    volumes:
+      - issue_catcher_data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  issue_catcher_data:
+    driver: local
