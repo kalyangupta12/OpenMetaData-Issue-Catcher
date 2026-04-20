@@ -24,14 +24,16 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY package.json ./
 COPY src/ ./src/
 
+# Create data dir and set ownership BEFORE declaring the volume
+# (Docker ignores chown after VOLUME declaration)
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+
 # State file volume (persisted across container restarts)
 VOLUME ["/app/data"]
 
 # Redirect seen_issues.json to /app/data so it persists
 ENV STATE_DIR=/app/data
 
-# Set ownership
-RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Health check
