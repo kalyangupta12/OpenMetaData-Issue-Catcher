@@ -2,12 +2,13 @@ import "dotenv/config";
 import cron from "node-cron";
 import { fetchUnassignedGoodFirstIssues, postComment, hasAlreadyCommented } from "./github.js";
 import { generateClaimComment } from "./gemini.js";
-import { emailNewIssue, emailCommentSuccess, emailError } from "./email.js";
+import { emailNewIssue, emailCommentSuccess, emailError, emailManualClaim } from "./email.js";
 import { loadSeenIssues, markSeen } from "./state.js";
 import { startDashboard } from "./server.js";
 
 const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "* * * * *";
 const ACTION_DELAY_MS = parseInt(process.env.ACTION_DELAY_MS || "2000", 10);
+const AUTO_COMMENT = (process.env.AUTO_COMMENT || "yes").trim().toLowerCase() === "yes";
 
 // ─── Startup Validation ────────────────────────────────────────────────────────
 const REQUIRED_ENV = [
@@ -34,6 +35,7 @@ console.log(`[Startup] 📅 CRON schedule: ${CRON_SCHEDULE}`);
 console.log(`[Startup] 👤 GitHub user: ${process.env.GITHUB_USERNAME}`);
 console.log(`[Startup] 📧 Notifications → ${process.env.RESEND_TO_EMAIL}`);
 console.log(`[Startup] 🔍 Watching: open-metadata/OpenMetadata (label: good-first-issue)`);
+console.log(`[Startup] 💬 Auto-comment mode: ${AUTO_COMMENT ? "✅ ON (will post comments)" : "📧 OFF (email-only, you comment manually)"}`);
 
 // ─── Start Live Log Dashboard ─────────────────────────────────────────────────
 startDashboard();
@@ -68,15 +70,34 @@ async function runJob() {
     // Mark seen immediately to avoid duplicate processing across runs
     markSeen(seenIssues, issue.number);
 
-    // Send "new issue found" email
+    // Always generate an AI-suggested comment (used either to post or as a suggestion in email)
+    let commentBody;
     try {
-      await emailNewIssue(issue);
-      console.log(`[Job] 📧 New issue notification sent`);
+      commentBody = await generateClaimComment(issue);
+      console.log(`[Job] 🤖 Generated comment suggestion (${commentBody.length} chars)`);
     } catch (err) {
-      console.error("[Job] ❌ Failed to send new-issue email:", err.message);
+      const errMsg = `Failed to generate comment for issue #${issue.number}`;
+      console.error(`[Job] ❌ ${errMsg}:`, err.message);
+      await emailError(errMsg, err.message);
+      commentBody = null;
     }
 
-    // Check if we already commented
+    // ── MANUAL MODE: just email the details, let user comment themselves ──
+    if (!AUTO_COMMENT) {
+      console.log(`[Job] 📧 Auto-comment OFF — sending manual digest for #${issue.number}`);
+      try {
+        await emailManualClaim(issue, commentBody);
+        console.log(`[Job] 📧 Manual claim digest sent`);
+      } catch (err) {
+        console.error("[Job] ❌ Failed to send manual digest email:", err.message);
+      }
+      await delay(ACTION_DELAY_MS);
+      continue;
+    }
+
+    // ── AUTO MODE: check for existing comment, then post ──
+    if (!commentBody) continue; // skip if generation failed
+
     let alreadyCommented = false;
     try {
       alreadyCommented = await hasAlreadyCommented(issue.number);
@@ -89,25 +110,11 @@ async function runJob() {
       continue;
     }
 
-    // Generate comment with Gemini
-    let commentBody;
-    try {
-      commentBody = await generateClaimComment(issue);
-      console.log(`[Job] 🤖 Generated comment (${commentBody.length} chars)`);
-    } catch (err) {
-      const errMsg = `Failed to generate comment for issue #${issue.number}`;
-      console.error(`[Job] ❌ ${errMsg}:`, err.message);
-      await emailError(errMsg, err.message);
-      continue;
-    }
-
     await delay(ACTION_DELAY_MS); // Rate-limit protection
 
-    // Post comment to GitHub
     try {
       const comment = await postComment(issue.number, commentBody);
       console.log(`[Job] ✅ Comment posted: ${comment.html_url}`);
-
       await emailCommentSuccess(issue, commentBody, comment.html_url);
       console.log(`[Job] 📧 Success notification sent`);
     } catch (err) {
