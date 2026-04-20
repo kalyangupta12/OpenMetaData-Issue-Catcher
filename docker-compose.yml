@@ -14,6 +14,9 @@ services:
       - CRON_SCHEDULE=${CRON_SCHEDULE:-* * * * *}
       - ACTION_DELAY_MS=${ACTION_DELAY_MS:-2000}
       - STATE_DIR=/app/data
+      - PORT=${PORT:-3000}
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
     volumes:
       - issue_catcher_data:/app/data
     logging:

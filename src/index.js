@@ -4,6 +4,7 @@ import { fetchUnassignedGoodFirstIssues, postComment, hasAlreadyCommented } from
 import { generateClaimComment } from "./gemini.js";
 import { emailNewIssue, emailCommentSuccess, emailError } from "./email.js";
 import { loadSeenIssues, markSeen } from "./state.js";
+import { startDashboard } from "./server.js";
 
 const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "* * * * *";
 const ACTION_DELAY_MS = parseInt(process.env.ACTION_DELAY_MS || "2000", 10);
@@ -32,7 +33,10 @@ console.log(`[Startup] ✅ All env vars present`);
 console.log(`[Startup] 📅 CRON schedule: ${CRON_SCHEDULE}`);
 console.log(`[Startup] 👤 GitHub user: ${process.env.GITHUB_USERNAME}`);
 console.log(`[Startup] 📧 Notifications → ${process.env.RESEND_TO_EMAIL}`);
-console.log(`[Startup] 🔍 Watching: open-metadata/OpenMetadata (label: good-first-issue)\n`);
+console.log(`[Startup] 🔍 Watching: open-metadata/OpenMetadata (label: good-first-issue)`);
+
+// ─── Start Live Log Dashboard ─────────────────────────────────────────────────
+startDashboard();
 
 // ─── Delay Helper ──────────────────────────────────────────────────────────────
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

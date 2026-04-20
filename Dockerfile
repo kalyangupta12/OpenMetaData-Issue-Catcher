@@ -38,4 +38,7 @@ USER appuser
 HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
   CMD node -e "console.log('healthy')" || exit 1
 
+# Expose the log dashboard port
+EXPOSE 3000
+
 CMD ["node", "src/index.js"]
